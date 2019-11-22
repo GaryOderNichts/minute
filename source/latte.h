@@ -78,6 +78,8 @@
 #define LT_AHB_UNK134                 (LT_REG_BASE + 0x134)
 #define LT_AHB_UNK138                 (LT_REG_BASE + 0x138)
 
+#define		DIFLAGS_BOOT_CODE	0x100000
+
 #define LT_ARB_CFG                    (LT_REG_BASE + 0x140)
 #define LT_DIFLAGS                    (LT_REG_BASE + 0x180)
 #define LT_RESETS_AHB                 (LT_REG_BASE + 0x184)

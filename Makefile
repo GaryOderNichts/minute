@@ -32,7 +32,7 @@ DATA				:=
 #---------------------------------------------------------------------------------
 ARCH			:=	-march=armv5te -mcpu=arm926ej-s -marm -mthumb-interwork -mbig-endian -mfloat-abi=soft
 
-CFLAGS			:=	-g -std=c11 -Wall -Werror -O3 \
+CFLAGS			:=	-g -std=c11 -Wall  -O3 \
 					-fomit-frame-pointer -ffunction-sections \
 					$(ARCH)
 
@@ -125,7 +125,7 @@ DEPENDS		:=	$(OFILES:.o=.d)
 ELFLOADER = $(ROOTDIR)/elfloader/elfloader.bin
 
 $(ROOTDIR)/fw.img: $(OUTPUT)-strip.elf $(ELFLOADER)
-	python3 $(ROOTDIR)/castify.py $(ELFLOADER) $< $@
+	python $(ROOTDIR)/castify.py $(ELFLOADER) $< $@
 
 $(OUTPUT)-strip.elf: $(OUTPUT).elf
 	$(STRIP) $< -o $@

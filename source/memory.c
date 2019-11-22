@@ -348,6 +348,8 @@ void mem_initialize(void)
     map_section(0xFFF, 0xFFF, 0x001, WRITEBACK_CACHE | DOMAIN(0) | AP_RWUSER); // SRAM
 
     map_section(0x0D0, 0x0D0, 0x010, NONBUFFERABLE | DOMAIN(0) | AP_RWUSER); // MMIO
+    // copy pasted from https://github.com/ajd4096/gbadev/blob/master/armboot/memory.c#L331
+	map_section(0x0d8, 0x0d8, 0x001, NONBUFFERABLE | DOMAIN(0) | AP_RWUSER);
 
     set_dacr(0xFFFFFFFF); //manager access for all domains, ignore AP
     set_ttbr((u32)__page_table); //configure translation table

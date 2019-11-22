@@ -60,6 +60,12 @@ u32 _main(void *base)
 
     gfx_clear(GFX_ALL, BLACK);
     printf("minute loading\n");
+    
+    // Copy pasted from https://github.com/ajd4096/gbadev/blob/romdumper/armboot/main.c#L44
+    write32(LT_RESETS_COMPAT, 0x031018ff);
+	//write32(0x0D8005E0, 0x7);
+	udelay(100000);
+	write32(LT_RESETS_COMPAT, 0xFFFFFFFF);
 
     printf("Initializing exceptions...\n");
     exception_initialize();
@@ -67,6 +73,11 @@ u32 _main(void *base)
     mem_initialize();
 
     irq_initialize();
+    // Copy pasted from https://github.com/ajd4096/gbadev/blob/romdumper/armboot/main.c#L61
+   	irq_enable(IRQ_GPIO1);
+	irq_enable(IRQ_RESET);
+	irq_enable(IRQ_TIMER);
+
     printf("Interrupts initialized\n");
 
     srand(read32(LT_TIMER));
@@ -97,7 +108,9 @@ u32 _main(void *base)
     printf("Mounting SLC...\n");
     isfs_init();
     
-    // Prompt user to skip autoboot, time = 0 will skip this.
+    res = powerpc_dump(NULL);
+	    
+    /*// Prompt user to skip autoboot, time = 0 will skip this.
     if(autoboot)
     {
         while((autoboot_timeout_s-- > 0) && autoboot)
@@ -127,7 +140,7 @@ u32 _main(void *base)
 
         smc_get_events();
         smc_set_odd_power(true);
-    }
+    }*/
     
     printf("Unmounting SLC...\n");
     isfs_fini();
@@ -144,6 +157,8 @@ u32 _main(void *base)
 
     printf("Shutting down caches and MMU...\n");
     mem_shutdown();
+    
+    main_shutdown();
 
     switch(boot.mode) {
         case 0:
