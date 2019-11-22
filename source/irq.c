@@ -16,10 +16,7 @@
 #include "latte.h"
 #include "gfx.h"
 #include "utils.h"
-#include "crypto.h"
-#include "nand.h"
 #include "sdcard.h"
-#include "mlc.h"
 
 static u32 _alarm_frequency = 0;
 
@@ -75,7 +72,7 @@ void irq_handler(void)
 //      printf("IRQ: NAND\n");
         write32(NAND_CTRL, 0x7fffffff); // shut it up
         write32(LT_INTSR_AHBALL_ARM, IRQF_NAND);
-        nand_irq();
+        //nand_irq();
     }
     /*
     if(all_mask & IRQF_GPIO1B) {
@@ -108,7 +105,7 @@ void irq_handler(void)
 
     if(lt_mask & IRQLF_SD2) {
 //      printf("IRQL: SD2\n");
-        mlc_irq();
+        //mlc_irq();
         write32(LT_INTSR_AHBLT_ARM, IRQLF_SD2);
     }
 

@@ -20,52 +20,31 @@
 #include "utils.h"
 #include "latte.h"
 #include "sdcard.h"
-#include "mlc.h"
 #include "string.h"
 #include "memory.h"
 #include "gfx.h"
 #include "elm.h"
 #include "irq.h"
-#include "exception.h"
-#include "crypto.h"
-#include "nand.h"
-#include "sdhc.h"
-#include "dump.h"
-#include "isfs.h"
 #include "smc.h"
-#include "filepicker.h"
-#include "ancast.h"
-#include "minini.h"
+#include "exception.h"
+#include "sdhc.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <malloc.h>
-#include "ppc_elf.h"
-#include "ppc.h"
 
 static struct {
     int mode;
     u32 vector;
 } boot = {0};
 
-bool autoboot = false;
-u32 autoboot_timeout_s = 3;
-char autoboot_file[256] = "ios.img";
-
 int main_autoboot(void);
+void powerpc_dump();
 
-u32 _main(void *base)
-{
+u32 _main(void *base) {
     (void)base;
     int res = 0; (void)res;
 
     gfx_clear(GFX_ALL, BLACK);
-    printf("minute loading\n");
-    
-    // Copy pasted from https://github.com/ajd4096/gbadev/blob/romdumper/armboot/main.c#L44
-    write32(LT_RESETS_COMPAT, 0x031018ff);
-	//write32(0x0D8005E0, 0x7);
-	udelay(100000);
-	write32(LT_RESETS_COMPAT, 0xFFFFFFFF);
 
     printf("Initializing exceptions...\n");
     exception_initialize();
@@ -73,16 +52,7 @@ u32 _main(void *base)
     mem_initialize();
 
     irq_initialize();
-    // Copy pasted from https://github.com/ajd4096/gbadev/blob/romdumper/armboot/main.c#L61
-   	irq_enable(IRQ_GPIO1);
-	irq_enable(IRQ_RESET);
-	irq_enable(IRQ_TIMER);
-
     printf("Interrupts initialized\n");
-
-    srand(read32(LT_TIMER));
-    crypto_initialize();
-    printf("crypto support initialized\n");
 
     printf("Initializing SD card...\n");
     sdcard_init();
@@ -93,289 +63,152 @@ u32 _main(void *base)
         printf("Error while mounting SD card (%d).\n", res);
         panic(0);
     }
-
-    minini_init();
     
-    printf("Initializing MLC...\n");
-    mlc_init();
-
-    if(mlc_check_card() == SDMMC_NO_CARD) {
-        printf("Error while initializing MLC.\n");
-        panic(0);
-    }
-    mlc_ack_card();
-
-    printf("Mounting SLC...\n");
-    isfs_init();
+    powerpc_dump(NULL);
     
-    res = powerpc_dump(NULL);
+    printf("Press POWER or EJECT to shutdown the console...\n");
+    smc_wait_events(SMC_POWER_BUTTON | SMC_EJECT_BUTTON);	
 	    
-    /*// Prompt user to skip autoboot, time = 0 will skip this.
-    if(autoboot)
-    {
-        while((autoboot_timeout_s-- > 0) && autoboot)
-        {
-            printf("Autobooting in %d seconds...\n", (int)autoboot_timeout_s + 1);
-            printf("Press the POWER button or EJECT button to skip autoboot.\n");
-            for(u32 i = 0; i < 1000000; i += 100000)
-            {
-                // Get input at .1s intervals.
-                u8 input = smc_get_events();
-                udelay(100000);
-                if((input & SMC_EJECT_BUTTON) || (input & SMC_POWER_BUTTON))
-                    autoboot = false;
-            }
-        }
-    }
+    smc_power_off();
     
-    // Try to autoboot if specified, if it fails just load the menu.
-    if(autoboot && main_autoboot() == 0)
-        printf("Autobooting...\n");
-    else
-    {
-        smc_get_events();
-        smc_set_odd_power(false);
-
-        menu_init(&menu_main);
-
-        smc_get_events();
-        smc_set_odd_power(true);
-    }*/
-    
-    printf("Unmounting SLC...\n");
-    isfs_fini();
-
-    printf("Shutting down MLC...\n");
-    mlc_exit();
-    
-    printf("Shutting down SD card...\n");
-    ELM_Unmount();
-    sdcard_exit();
-
-    printf("Shutting down interrupts...\n");
-    irq_shutdown();
-
-    printf("Shutting down caches and MMU...\n");
-    mem_shutdown();
-    
-    main_shutdown();
-
-    switch(boot.mode) {
-        case 0:
-            if(boot.vector) {
-                printf("Vectoring to 0x%08lX...\n", boot.vector);
-            } else {
-                printf("No vector address, hanging!\n");
-                panic(0);
-            }
-            break;
-        case 1: smc_power_off(); break;
-        case 2: smc_reset(); break;
-    }
-
     return boot.vector;
 }
 
-int boot_ini(const char* key, const char* value)
+// https://github.com/ajd4096/gbadev/blob/romdumper/armboot/powerpc_elf.c#L257
+void ppc_write_dumper_stub(u32 location)
 {
-    if(!strcmp(key, "autoboot"))
-        autoboot = minini_get_bool(value, 0);
-    if(!strcmp(key, "autoboot_file"))
-        strncpy(autoboot_file, value, sizeof(autoboot_file));
-    if(!strcmp(key, "autoboot_timeout"))
-        autoboot_timeout_s = (u32)minini_get_uint(value, 3);
+    size_t i = 0;
+
+    write32(location + i, /*0x4000*/ 0x7c79faa6 /* mfl2cr r3*/); i += sizeof(u32);
+    write32(location + i, /*0x4004*/ 0x3c807fff /* lis r4, 0x7FFF*/); i += sizeof(u32);
+    write32(location + i, /*0x4008*/ 0x6084ffff /* ori r4, r4, 0xFFFF*/); i += sizeof(u32);
+    write32(location + i, /*0x400c*/ 0x7c632038 /* and r3, r3, r4*/); i += sizeof(u32);
+    write32(location + i, /*0x4010*/ 0x7c79fba6 /* mtl2cr r3*/); i += sizeof(u32);
+    write32(location + i, /*0x4014*/ 0x7c0004ac /* sync*/); i += sizeof(u32);
+    write32(location + i, /*0x4018*/ 0x7c70faa6 /* mfdbsr r3*/); i += sizeof(u32);
+    write32(location + i, /*0x401c*/ 0x3c80ffff /* lis r4, 0xFFFF*/); i += sizeof(u32);
+    write32(location + i, /*0x4020*/ 0x60843fff /* ori r4, r4, 0x3FFF*/); i += sizeof(u32);
+    write32(location + i, /*0x4024*/ 0x7c632038 /* and r3, r3, r4*/); i += sizeof(u32);
+    write32(location + i, /*0x4028*/ 0x7c70fba6 /* mtdbsr r3*/); i += sizeof(u32);
+    write32(location + i, /*0x402c*/ 0x7c0004ac /* sync*/); i += sizeof(u32);
+    write32(location + i, /*0x4030*/ 0x3c600132 /* lis r3, 0x0132*/); i += sizeof(u32);
+    write32(location + i, /*0x4034*/ 0x3c800c32 /* lis r4, 0x0c32*/); i += sizeof(u32);
+    write32(location + i, /*0x4038*/ 0x3ca00000 /* lis r5, 0*/); i += sizeof(u32);
+    write32(location + i, /*0x403c*/ 0x3cc00000 /* lis r6, 0*/); i += sizeof(u32);
     
-    return 0;
-}
-
-int main_autoboot(void)
-{
-    FILE* f = fopen(autoboot_file, "rb");
-    if(f == NULL)
-    {
-        printf("Failed to open %s.\n", autoboot_file);
-        printf("Press POWER to continue.\n");
-        smc_wait_events(SMC_POWER_BUTTON);
-        return -1;
-    }
-
-    u32 magic;
-    fread(&magic, 1, sizeof(magic), f);
-    fclose(f);
+    write32(location + i, /*0x4040*/ 0x2c060040 /* cmpwi r6, 0x40*/); i += sizeof(u32);
+    write32(location + i, /*0x4044*/ 0x4080001c /* bge- 0x4060*/); i += sizeof(u32);
+    write32(location + i, /*0x4048*/ 0x80a40000 /* lwz r5, 0(r4)*/); i += sizeof(u32);
+    write32(location + i, /*0x404c*/ 0x90a30000 /* stw r5, 0(r3)*/); i += sizeof(u32);
+    write32(location + i, /*0x4050*/ 0x38630004 /* addi r3, r3, 4*/); i += sizeof(u32);
+    write32(location + i, /*0x4054*/ 0x38840004 /* addi r4, r4, 4*/); i += sizeof(u32);
+    write32(location + i, /*0x4058*/ 0x38c60004 /* addi r6, r6, 4*/); i += sizeof(u32);
+    write32(location + i, /*0x405c*/ 0x4bffffe4 /* b 0x4040*/); i += sizeof(u32);
     
-    // Ancast image.
-    if(magic == 0xEFA282D9)
-        boot.vector = ancast_iop_load(autoboot_file);
+    write32(location + i, /*0x4060*/ 0x3c600133 /* lis r3, 0x0133*/); i += sizeof(u32);
+    write32(location + i, /*0x4064*/ 0x3c800000 /* lis r4, 0*/); i += sizeof(u32);
+    write32(location + i, /*0x4068*/ 0x3ca00000 /* lis r5, 0*/); i += sizeof(u32);
+    write32(location + i, /*0x406c*/ 0x3cc00000 /* lis r6, 0*/); i += sizeof(u32);
     
-    if(boot.vector)
-    {
-        boot.mode = 0;
-        return 0;
-    }
-    else
-    {
-        printf("Failed to load file for autoboot: %s\n", autoboot_file);
-        printf("Press POWER to continue.\n");
-        smc_wait_events(SMC_POWER_BUTTON);
-        return -2;
-    }
+    write32(location + i, /*0x4070*/ 0x2c064000 /* cmpwi r6, 0x4000*/); i += sizeof(u32);
+    write32(location + i, /*0x4074*/ 0x4080001c /* bge- 0x4060*/); i += sizeof(u32);
+    write32(location + i, /*0x4075*/ 0x80a40000 /* lwz r5, 0(r4)*/); i += sizeof(u32);
+    write32(location + i, /*0x407c*/ 0x90a30000 /* stw r5, 0(r3)*/); i += sizeof(u32);
+    write32(location + i, /*0x4080*/ 0x38630004 /* addi r3, r3, 4*/); i += sizeof(u32);
+    write32(location + i, /*0x4084*/ 0x38840004 /* addi r4, r4, 4*/); i += sizeof(u32);
+    write32(location + i, /*0x4088*/ 0x38c60004 /* addi r6, r6, 4*/); i += sizeof(u32);
+    write32(location + i, /*0x408c*/ 0x4bffffe4 /* b 0x4070*/); i += sizeof(u32);
+    write32(location + i, /*0x4090*/ 0x48000000  /* b 0x4090*/); i += sizeof(u32);
+    dc_flushrange((void*)location, i);
 }
 
-void main_reload(void)
+const u32 dumper_stub_location = 0x4000;
+
+void ppc_hang(void)
 {
+    clear32(LT_RESETS_COMPAT, 0x230);
+    udelay(100);
+}
+
+// Copy pasted from https://github.com/ajd4096/gbadev/blob/romdumper/armboot/powerpc_elf.c#L309
+#define WAIT_TIME	2362
+void powerpc_dump(const char *path)
+{	
     gfx_clear(GFX_ALL, BLACK);
+    printf("Hello from powerpc_dump.\r\n");
+    
+    // I don't think we need that...
+    // ppc_prepare();
+    // printf("Prepared PPC.\r\n");
+    FIL fd;
+	u32 boot0 = read32(LT_BOOT0), bw;
+		
+	// boot0 dump
+	write32(LT_BOOT0, boot0&~0x1000);
+	f_open(&fd, "sdmc:/boot0.bin", FA_CREATE_ALWAYS|FA_WRITE);
+	f_write(&fd, (void*)0xFFF00000, 0x4000, (UINT*) &bw);
+	f_close(&fd);
+	write32(LT_BOOT0, boot0);	
+	printf("Boot0 dump done. \r\n");	
+    printf("Now for the bootROM and OTP.\r\n");
+	set32(LT_DIFLAGS,DIFLAGS_BOOT_CODE);
+	set32(LT_AHBPROT, 0xFFFFFFFF);
+	printf("Resetting PPC. \r\n\r\n");    
+    int wait_time=WAIT_TIME;    
+    while(1){
+        ppc_hang();
+        
+        clear32(LT_RESETS_COMPAT, 0x30);
 
-    boot.vector = ancast_iop_load("fw.img");
+        // Write code to the reset vector
+        write32(0x100, 0x48003f00); // b 0x4000
 
-    if(boot.vector) {
-        boot.mode = 0;
-        menu_active = false;
-    } else {
-        printf("Failed to load fw.img!\n");
-        printf("Press POWER to continue.\n");
-        smc_wait_events(SMC_POWER_BUTTON);
+        //write_stub(dumper_stub_location, dumper_stub, dumper_stub_size);
+        ppc_write_dumper_stub(dumper_stub_location);
+
+        dc_flushrange((void*)0x100,32);
+        dc_flushrange((void*)0x4000,128);
+        
+        //reboot ppc side
+        clear32(LT_RESETS_COMPAT, 0x30); // HRST+SRST
+        udelay(100);
+        set32(LT_RESETS_COMPAT, 0x20); // remove SRST
+        udelay(100);
+        set32(LT_RESETS_COMPAT, 0x10); // remove HRST
+
+        udelay(wait_time++);
+
+        // SRESET
+        clear32(LT_RESETS_COMPAT, 0x20);
+        udelay(100);
+        set32(LT_RESETS_COMPAT, 0x20);
+        udelay(2000); // give PPC a moment to dump to RAM
+        
+        dc_invalidaterange((void*)0x1320000, 0x40);
+       
+        if(read32(0x1320000) != 0 || wait_time > 3000){
+            break;
+        }
     }
-}
-
-void main_shutdown(void)
-{
-    gfx_clear(GFX_ALL, BLACK);
-
-    boot.mode = 1;
-    menu_active = false;
-}
-
-void main_reset(void)
-{
-    gfx_clear(GFX_ALL, BLACK);
-
-    boot.mode = 2;
-    menu_active = false;
-}
-
-void main_boot_ppc(void)
-{
-    gfx_clear(GFX_ALL, BLACK);
-
-    char path[_MAX_LFN] = {0};
-    pick_file("sdmc:", false, path);
-
-    u32 entry = 0;
-    int res = ppc_load_file(path, &entry);
-    if(res) {
-        printf("ppc_load_file: %d\n", res);
-        goto ppc_exit;
+    
+    if(read32(0x1320000) == 0x0){
+        printf("Dumping failed.\r\n");
+        return;
     }
+ 
+	if (f_open(&fd, "sdmc:/otp_ppc.bin", FA_WRITE|FA_CREATE_ALWAYS) == FR_OK) {
+		dc_invalidaterange((void*)0, 0x40);
+		f_write(&fd, (void*)0x1320000, 0x40, (UINT*) &bw);
+		f_close(&fd);
+        printf("Espresso OTP dumped to file.\r\n");
+	}
+    dc_invalidaterange((void*)0x1330000, 0x4000);
 
-    ppc_jump(entry);
 
-ppc_exit:
-    printf("Press POWER to exit.\n");
-    smc_wait_events(SMC_POWER_BUTTON);
-}
-
-void main_quickboot_fw(void)
-{
-    gfx_clear(GFX_ALL, BLACK);
-
-    boot.vector = ancast_iop_load("ios.img");
-
-    if(boot.vector) {
-        boot.mode = 0;
-        menu_active = false;
-    } else {
-        printf("Failed to load 'ios.img'!\n");
-        printf("Press POWER to continue.\n");
-        smc_wait_events(SMC_POWER_BUTTON);
-    }
-}
-
-void main_boot_fw(void)
-{
-    gfx_clear(GFX_ALL, BLACK);
-
-    char path[_MAX_LFN] = {0};
-    pick_file("sdmc:", false, path);
-
-    boot.vector = ancast_iop_load(path);
-
-    if(boot.vector) {
-        boot.mode = 0;
-        menu_active = false;
-    } else {
-        printf("Failed to load '%s'!\n", path);
-        printf("Press POWER to continue.\n");
-        smc_wait_events(SMC_POWER_BUTTON);
-    }
-}
-
-void main_reset_crash(void)
-{
-	gfx_clear(GFX_ALL, BLACK);
-
-	printf("Clearing SMC crash buffer...\n");
-
-	const char buffer[64 + 1] = "Crash buffer empty.";
-	smc_set_panic_reason(buffer);
-
-    printf("Press POWER to exit.\n");
-    smc_wait_events(SMC_POWER_BUTTON);
-}
-
-void main_get_crash(void)
-{
-    gfx_clear(GFX_ALL, BLACK);
-    printf("Reading SMC crash buffer...\n");
-
-    char buffer[64 + 1] = {0};
-    smc_get_panic_reason(buffer);
-
-    // We use this SMC buffer for storing exception info, however, it is only 64 bytes.
-    // This is exactly enough for r0-r15, but nothing else - not even some exception "magic"
-    // or even exception type. Here we have some crap "heuristic" to determine if it's ASCII text
-    // (a panic reason) or an exception dump.
-    bool exception = false;
-    for(int i = 0; i < 64; i++)
-    {
-        char c = buffer[i];
-        if(c >= 32 && c < 127) continue;
-        if(c == 10 || c == 0) continue;
-
-        exception = true;
-        break;
-    }
-
-    if(exception) {
-        u32* regs = (u32*)buffer;
-        printf("Exception registers:\n");
-        printf("  R0-R3: %08lx %08lx %08lx %08lx\n", regs[0], regs[1], regs[2], regs[3]);
-        printf("  R4-R7: %08lx %08lx %08lx %08lx\n", regs[4], regs[5], regs[6], regs[7]);
-        printf(" R8-R11: %08lx %08lx %08lx %08lx\n", regs[8], regs[9], regs[10], regs[11]);
-        printf("R12-R15: %08lx %08lx %08lx %08lx\n", regs[12], regs[13], regs[14], regs[15]);
-    } else {
-        printf("Panic reason:\n");
-        printf("%s\n", buffer);
-    }
-
-    printf("Press POWER to exit.\n");
-    smc_wait_events(SMC_POWER_BUTTON);
-}
-
-void main_credits(void)
-{
-    gfx_clear(GFX_ALL, BLACK);
-    console_init();
-
-    console_add_text("minute (not minute) - a Wii U port of mini\n");
-
-    console_add_text("The SALT team: Dazzozo, WulfyStylez, shinyquagsire23 and Relys (in spirit)\n");
-
-    console_add_text("Special thanks to fail0verflow (formerly Team Twiizers) for the original \"mini\", and for the vast\nmajority of Wii research and early Wii U research!\n");
-
-    console_add_text("Thanks to all WiiUBrew contributors, including: Hykem, Marionumber1, smea, yellows8, derrek,\nplutoo, naehrwert...\n");
-
-    console_add_text("Press POWER to exit.");
-
-    console_show();
-    smc_wait_events(SMC_POWER_BUTTON);
+	if (f_open(&fd, "sdmc:/bootrom.bin", FA_WRITE|FA_CREATE_ALWAYS) == FR_OK) {
+		dc_invalidaterange((void*)0x1330000, 0x4000);
+		f_write(&fd, (void*)0x1330000, 0x4000, (UINT*) &bw);
+		f_close(&fd);
+        printf("Boot ROM dumped to file.\r\n");
+	}    
 }
