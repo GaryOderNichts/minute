@@ -309,6 +309,12 @@ int powerpc_dump(const char *path)
 	set32(LT_DIFLAGS,DIFLAGS_BOOT_CODE);
 	set32(LT_AHBPROT, 0xFFFFFFFF);
 	printf("Resetting PPC. End on-screen debug output.\r\n\r\n");
+    
+    ppc_hang();
+
+    set32(LT_COMPAT_MEMCTRL_STATE, 0x20);
+    set32(LT_SYSPROT, 0x99);
+
 	
 	clear32(LT_RESETS_COMPAT, 0x30);
 
