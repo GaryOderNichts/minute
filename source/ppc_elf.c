@@ -310,41 +310,44 @@ int powerpc_dump(const char *path)
 	set32(LT_AHBPROT, 0xFFFFFFFF);
 	printf("Resetting PPC. End on-screen debug output.\r\n\r\n");
     
-    ppc_hang();
-
-    set32(LT_COMPAT_MEMCTRL_STATE, 0x20);
-    set32(LT_SYSPROT, 0x99);
-
-	
-	clear32(LT_RESETS_COMPAT, 0x30);
-
-	// Write code to the reset vector
-	write32(0x100, 0x48003f00); // b 0x4000
-
-	//write_stub(dumper_stub_location, dumper_stub, dumper_stub_size);
-    ppc_write_dumper_stub(dumper_stub_location);
-
-	dc_flushrange((void*)0x100,32);
-	dc_flushrange((void*)0x4000,128);
+    int wait_time=2362;
     
-    //reboot ppc side
-    clear32(LT_RESETS_COMPAT, 0x30); // HRST+SRST
-    udelay(100);
-    set32(LT_RESETS_COMPAT, 0x20); // remove SRST
-    udelay(100);
-    set32(LT_RESETS_COMPAT, 0x10); // remove HRST
+    while(1){
+        ppc_hang();
+        
+        clear32(LT_RESETS_COMPAT, 0x30);
 
-    udelay(WAIT_TIME);
+        // Write code to the reset vector
+        write32(0x100, 0x48003f00); // b 0x4000
 
-    // SRESET
-    clear32(LT_RESETS_COMPAT, 0x20);
-    udelay(100);
-    set32(LT_RESETS_COMPAT, 0x20);
-    udelay(2000); // give PPC a moment to dump to RAM
-    
-    dc_invalidaterange((void*)0x1320000, 0x40);
- 
-    printf("First bytes of dumped ppc otp: %08X\n.\r\n", read32(0x1320000));   
+        //write_stub(dumper_stub_location, dumper_stub, dumper_stub_size);
+        ppc_write_dumper_stub(dumper_stub_location);
+
+        dc_flushrange((void*)0x100,32);
+        dc_flushrange((void*)0x4000,128);
+        
+        //reboot ppc side
+        clear32(LT_RESETS_COMPAT, 0x30); // HRST+SRST
+        udelay(100);
+        set32(LT_RESETS_COMPAT, 0x20); // remove SRST
+        udelay(100);
+        set32(LT_RESETS_COMPAT, 0x10); // remove HRST
+
+        udelay(wait_time++);
+
+        // SRESET
+        clear32(LT_RESETS_COMPAT, 0x20);
+        udelay(100);
+        set32(LT_RESETS_COMPAT, 0x20);
+        udelay(2000); // give PPC a moment to dump to RAM
+        
+        dc_invalidaterange((void*)0x1320000, 0x40);
+       
+        if(read32(0x1320000) != 0 || wait_time > 3000){
+            break;
+        }
+    }    
+    printf("(%d)First bytes of dumped ppc otp: %08X\n.\r\n",wait_time, read32(0x1320000));  
  
 	if (f_open(&fd, "sdmc:/otp_ppc.bin", FA_WRITE|FA_CREATE_ALWAYS) == FR_OK) {
 		dc_invalidaterange((void*)0, 0x40);
