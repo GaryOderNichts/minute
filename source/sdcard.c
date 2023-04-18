@@ -327,7 +327,7 @@ int sdcard_select(void)
     cmd.c_arg = ((u32)card.rca)<<16;
     cmd.c_flags = SCF_RSP_R1B;
     sdhc_exec_command(card.handle, &cmd);
-    printf("%s: resp=%x\n", __FUNCTION__, MMC_R1(cmd.c_resp));
+    printf("%s: resp=%lx\n", __FUNCTION__, MMC_R1(cmd.c_resp));
 //  sdhc_dump_regs(card.handle);
 
 //  printf("present state = %x\n", HREAD4(hp, SDHC_PRESENT_STATE));

@@ -41,8 +41,8 @@ CFLAGS			+=	$(INCLUDE) -DCAN_HAZ_IRQ -D_GNU_SOURCE -fno-builtin-printf -Wno-nonn
 CXXFLAGS		:=	$(CFLAGS) -fno-rtti -fno-exceptions
 
 ASFLAGS			:=	-g $(ARCH)
-LDFLAGS			 =	-nostartfiles -g --specs=../stub.specs $(ARCH) -Wl,--gc-sections,-Map,$(TARGET).map \
-					-L$(DEVKITARM)/lib/gcc/arm-none-eabi/5.3.0/be -L$(DEVKITARM)/arm-none-eabi/lib/be
+LDFLAGS			 =	-g --specs=../stub.specs $(ARCH) -Wl,--gc-sections,-Map,$(TARGET).map \
+					-L$(DEVKITARM)/lib/gcc/arm-none-eabi/12.2.0/be -L$(DEVKITARM)/arm-none-eabi/lib/be
 
 LIBS			:=	
 

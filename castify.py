@@ -3,14 +3,14 @@
 import sys, os, struct
 import __future__
 
-from base64 import b16decode
+# from base64 import b16decode
+import codecs
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA
 
 #To get the IV: Compile dimok789/FIX94's iosuhax, copy them out of scripts/keys.py.
-#make sure to capitalise all the letters
-key = b16decode(b"B5XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-iv = b16decode(b"91XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+key = codecs.decode(b"B5XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 'hex')
+iv = codecs.decode(b"91XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 'hex')
 
 no_crypto = False
 

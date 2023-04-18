@@ -486,7 +486,7 @@ sdhc_wait_state(struct sdhc_host *hp, u_int32_t mask, u_int32_t value)
 }
 
 void
-sdhc_async_command(struct sdhc_host *hp, struct sdmmc_command *cmd)
+sdhc_exec_command(struct sdhc_host *hp, struct sdmmc_command *cmd)
 {
     int error;
 
@@ -512,11 +512,7 @@ sdhc_async_command(struct sdhc_host *hp, struct sdmmc_command *cmd)
         hp->data_command = 0;
         return;
     }
-}
 
-void
-sdhc_async_response(struct sdhc_host *hp, struct sdmmc_command *cmd)
-{
     /*
      * Wait until the command phase is done, or until the command
      * is marked done for any other reason.
@@ -561,13 +557,6 @@ sdhc_async_response(struct sdhc_host *hp, struct sdmmc_command *cmd)
         cmd->c_opcode, cmd->c_flags, cmd->c_error, (cmd->c_resp[0] >> 9) & 15));
     SET(cmd->c_flags, SCF_ITSDONE);
     hp->data_command = 0;
-}
-
-void
-sdhc_exec_command(struct sdhc_host *hp, struct sdmmc_command *cmd)
-{
-    sdhc_async_command(hp, cmd);
-    sdhc_async_response(hp, cmd);
 }
 
 int
@@ -649,9 +638,7 @@ sdhc_start_command(struct sdhc_host *hp, struct sdmmc_command *cmd)
         cmd->c_resid = blkcount;
         cmd->c_buf = cmd->c_data;
 
-        if (ISSET(cmd->c_flags, SCF_CMD_READ)) {
-            dc_invalidaterange(cmd->c_data, cmd->c_datalen);
-        } else {
+        if (ISSET(cmd->c_flags, SCF_CMD_READ) == 0) {
             dc_flushrange(cmd->c_data, cmd->c_datalen);
             ahb_flush_to(hp->pa.rb);
         }
@@ -713,8 +700,10 @@ sdhc_transfer_data(struct sdhc_host *hp, struct sdmmc_command *cmd)
         printf("sdhc: CMD52/53 error response flags %#x\n",
             MMC_R1(cmd->c_resp) & 0xff00);
 #endif
-    if (ISSET(cmd->c_flags, SCF_CMD_READ))
-            ahb_flush_from(hp->pa.wb);
+    if (ISSET(cmd->c_flags, SCF_CMD_READ)) {
+        ahb_flush_from(hp->pa.wb);
+        dc_invalidaterange(cmd->c_data, cmd->c_datalen);
+    }
 
     if (error != 0)
         cmd->c_error = error;
